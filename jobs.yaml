@@ -1,0 +1,25 @@
+# https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework
+---
+- name: bootstrap-venv
+  image: tf-python39
+  command: cd $PWD && ./bootstrap_venv.sh
+  wait: true
+  emails: onfinish
+# a cronjob for sandbox move in hewiki
+- image: tf-python39
+  name: sandbox-move
+  command: pyvenv/bin/python ./sandboxMove.py
+  emails: onfailure 
+  schedule: "15 1,13 * * *"
+# a cronjob for drafts in work in hewiki
+- image: tf-python39
+  name: work-template
+  command: pyvenv/bin/python ./workTemplate.py
+  emails: onfailure 
+  schedule: "30 1,13 * * *"
+# a cronjob for drafts namespace
+- image: tf-python39
+  name: work-template
+  command: pyvenv/bin/python ./draftWatch.py
+  emails: onfailure
+  schedule: "45 1 * * *"
