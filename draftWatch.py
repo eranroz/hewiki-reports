@@ -21,7 +21,7 @@ def format_entry(row):
     """
     title, timestamp, page_len, links = row
     title = title.decode('utf-8').replace('_', ' ')
-    timestamp = datetime.datetime.strptime(timestamp, '%Y%m%d%H%M%S')
+    timestamp = datetime.datetime.strptime(timestamp.decode('utf-8'), '%Y%m%d%H%M%S')
 
     return '{{{{/פריט|{}|{}|{}|{}}}}}'.format(title, timestamp, page_len, links)
 
@@ -31,8 +31,8 @@ def get_from_db():
 
     :return: A text with report on the pages in draft database
     """
-    with sql.connect(host=settings.host, db=settings.dbname, read_default_file=settings.connect_file) as cursor:
-        # cursor = conn.cursor()
+    with sql.connect(host=settings.host, db=settings.dbname, read_default_file=settings.connect_file) as conn:
+        cursor = conn.cursor()
         cursor.execute('''
             /* draftWatch.py SLOW_OK */
             select page_title, rev_timestamp, page_len, 
