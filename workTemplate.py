@@ -35,7 +35,7 @@ def get_from_db():
     INNER JOIN actor
     ON rev_actor=actor_id
     WHERE p.page_namespace=0 
-        AND p.page_id in (SELECT tl_from FROM templatelinks WHERE tl_title like 'בעבודה%' and tl_namespace=10)
+        AND p.page_id in (SELECT tl_from FROM templatelinks join linktarget on tl_target_id = lt_id WHERE lt_title like 'בעבודה%' and lt_namespace=10)
         AND NOT EXISTS(select * from user_groups where ug_user=actor_user and ug_group='bot') 
         AND NOT EXISTS(select * from comment
             where (comment_text like '%שחזור%' or comment_text like '%שוחזר%') and r.rev_comment_id=comment_id)
@@ -81,10 +81,10 @@ def get_data_for_finished(articles):
     :param articles: list of articles completed to work
     :return: Text for reporting these articles
     """
-    conn = sql.connect(host=settings.host, db=settings.dbname, read_default_file=settings.connect_file, charset='utf8')
-    titles = ','.join(["'%s'" % (conn.escape(x.replace(' ', '_').encode('utf-8'))) for x in articles])
+    conn = sql.connect(host=settings.host,
+                       db=settings.dbname,
+                       read_default_file=settings.connect_file, charset='utf8')
 
-    print(titles.encode('utf-8', 'replace').decode())
     cursor = conn.cursor()
     cursor.execute('''
     /* workTemplate.py SLOW_OK */
@@ -93,9 +93,9 @@ def get_data_for_finished(articles):
     inner join page p
     on 
     p.page_id=cl.cl_from
-    where p.page_title in (%s)
+    where p.page_title in %(articles)s
     group by p.page_title
-    ''' % titles)
+    ''', {'articles': tuple([p.replace(' ', '_') for p in articles])})  # % titles
 
     decoded_res = []
     for title, pLen, touched, categories in cursor.fetchall():
@@ -108,26 +108,37 @@ def get_data_for_finished(articles):
                           title, pLen, touched, categories in decoded_res])
 
 
+def log_work_template_status():
+    """Reports the status of pages with work template
+
+    :return: list of pages that had work template before the report and aren't in work now
+    """
+    old_work = pywikibot.Page(site, OLD_IN_WORK_PAGE)
+    old_in_work = [re.sub('# *\[\[(.*?)\]\].*', r'\1', x) for x in old_work.get().splitlines()[1:]]
+    result_text, now_in_work = get_from_db()
+    old_work.put(result_text, summary=u'עדכון אוטומטי')
+    work_finished = [x for x in old_in_work if x not in now_in_work]
+    return work_finished
+
+
 def main():
     """
     Main report logic
     """
-    log_finished_work = False  # TODO re-enable report on recently completed
-    old_work = pywikibot.Page(site, OLD_IN_WORK_PAGE)
-    old_in_work = [re.sub('# *\[\[(.*?)\]\].*', r'\1', x) for x in old_work.get().splitlines()[1:]]
-    result_text, now_in_work = get_from_db()
+    log_finished_work = True  # TODO re-enable report on recently completed
+    work_finished = log_work_template_status()
+
     if log_finished_work:
-        workFinished = [x for x in old_in_work if x not in now_in_work]
-        print('Work finished: %i' % len(workFinished))
-        finishFeed = get_data_for_finished(workFinished) if len(workFinished) > 0 else ''
-        newPagesFinishedWorking = u'{{/פתיח}}\n|-\n%s\n' % finishFeed
+        print('Work finished: %i' % len(work_finished))
+        finishFeed = get_data_for_finished(work_finished) if len(work_finished) > 0 else ''
+        if finishFeed:
+            newPagesFinishedWorking = u'{{/פתיח}}\n|-\n%s\n' % finishFeed
 
-        updatedPage = pywikibot.Page(site, FINISHED_WORK_PAGE)
-        newUpdateText = updatedPage.get().replace(u'{{/פתיח}}\n', newPagesFinishedWorking)
-        print(newPagesFinishedWorking)
+            updatedPage = pywikibot.Page(site, FINISHED_WORK_PAGE)
+            newUpdateText = updatedPage.get().replace(u'{{/פתיח}}\n', newPagesFinishedWorking)
+            print(newPagesFinishedWorking)
 
-        updatedPage.put(newUpdateText, summary=u'עדכון אוטומטי')
-    old_work.put(result_text, summary=u'עדכון אוטומטי')
+            updatedPage.put(newUpdateText, summary=u'עדכון אוטומטי')
 
 
 if __name__ == '__main__':
